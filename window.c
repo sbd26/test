@@ -1,94 +1,107 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <err.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#define H 200
-#define W 200
-#define X 300
-#define Y 200
-#define B 3
+#define MH 768
+#define MW 1366
 
-static Display *dpy;
-static unsigned int scr;
-static Window root;
-static Window child;
+typedef struct {
+  u_int16_t px;
+  u_int16_t py;
+  u_int16_t height;
+  u_int16_t width;
+  u_int8_t border;
+} Property;
 
+Property pp;
 
-void handelKeypress(KeySym k){
-  static int pressD = 0;
+typedef struct {
+  Window c;
+  Window m;
+} Buttons;
 
-  if (k == XK_q){
-    printf("Destroying the Window :3");
-    XDestroyWindow(dpy, child);
-    XCloseDisplay(dpy);
-    exit(0);
+typedef struct {
+  int scr;
+  Display *dpy;
+  Window root;
+  Window child;
+  Buttons btns;
+} bd26;
+
+bd26 wm;
+
+void init_wm() {
+  wm.dpy = XOpenDisplay(NULL);
+  if (!wm.dpy) {
+    err(1, "Can't Create Connection\n");
+    return;
   }
+  wm.scr = DefaultScreen(wm.dpy);
+  wm.root = RootWindow(wm.dpy, wm.scr);
 
-  if (k == XK_d){
-    pressD = 1;
-  }
-  else if (pressD && k == XK_h){
-    XWindowAttributes child_attr;
-    XGetWindowAttributes(dpy, child, &child_attr);
-
-    int nH = child_attr.height - 30;
-    XResizeWindow(dpy, child, child_attr.width, nH);
-    XFlush(dpy);
-    pressD = 0;
-  }
-  else if (k == XK_b){
-    pressD = 0;
-    XWindowAttributes child_attr;
-    XGetWindowAttributes(dpy, child, &child_attr);
-
-    int nW = child_attr.width + 30;
-    
-    XResizeWindow(dpy, child, nW, child_attr.height);
-    XFlush(dpy);
-  }
-
-  else if (k == XK_h){
-    pressD = 0;
-    XWindowAttributes child_attr;
-    XGetWindowAttributes(dpy, child, &child_attr);
-
-    int nH = child_attr.height + 30;
-
-    XResizeWindow(dpy, child, child_attr.width, nH);
-    XFlush(dpy);
-  }
-
+  pp.border = 5;
+  pp.px = 200;
+  pp.py = 200;
+  pp.height = 300;
+  pp.width = 300;
 }
 
-int main(){
+void close_window() { XCloseDisplay(wm.dpy); }
 
-  dpy = XOpenDisplay(NULL);
+void handle_close_button() {
+  close_window();
+  exit(0);
+}
+void handle_mx_button() {
+  XWindowAttributes xwa;
+  XGetWindowAttributes(wm.dpy, wm.child, &xwa);
 
-  if (!dpy) {
-    err(1, "Can't create connection");
-    return 1;
-  }
+  if (xwa.height != MH || xwa.width != MW)
+    // XResizeWindow(wm.dpy, wm.child, MW, MH);
+    XMoveResizeWindow(wm.dpy, wm.child, 0, 0, MW, MH);
+  if (xwa.height == MH || xwa.width == MW)
+    // XResizeWindow(wm.dpy, wm.child, pp.width, pp.height);
+    XMoveResizeWindow(wm.dpy, wm.child, pp.px, pp.py, pp.height, pp.width);
+  XFlush(wm.dpy);
+}
 
-  scr = DefaultScreen(dpy);
-  root = RootWindow(dpy, scr);
-  child = XCreateSimpleWindow(dpy, root, X, Y, W, H, B, BlackPixel(dpy, scr), WhitePixel(dpy, scr));
+void run_wm() {
+  wm.child = XCreateSimpleWindow(
+      wm.dpy, wm.root, pp.px, pp.py, pp.width, pp.height, pp.border,
+      BlackPixel(wm.dpy, wm.scr), WhitePixel(wm.dpy, wm.scr));
+  wm.btns.m = XCreateSimpleWindow(wm.dpy, wm.child, 0, 0, 40, 40, 0,
+                                  BlackPixel(wm.dpy, wm.scr),
+                                  BlackPixel(wm.dpy, wm.scr));
+  wm.btns.c = XCreateSimpleWindow(wm.dpy, wm.child, 50, 0, 20, 20, 0,
+                                  BlackPixel(wm.dpy, wm.scr),
+                                  BlackPixel(wm.dpy, wm.scr));
 
-  XSelectInput(dpy, child, KeyPressMask); 
-  XMapWindow(dpy, child);
-  XFlush(dpy);
+  XMapWindow(wm.dpy, wm.child);
+  XMapWindow(wm.dpy, wm.btns.c);
+  XMapWindow(wm.dpy, wm.btns.m);
 
+  XSelectInput(wm.dpy, wm.btns.m, ButtonPressMask);
+  XSelectInput(wm.dpy, wm.btns.c, ButtonPressMask);
+  XFlush(wm.dpy);
   while (1) {
-    XEvent ev;
-    XNextEvent(dpy, &ev);
+    XEvent e;
+    XNextEvent(wm.dpy, &e);
+    if (e.type == ButtonPress) {
+      XButtonEvent *newev = (XButtonEvent *)&e;
 
-    if (ev.type == KeyPress){
-      char buf[1];
-      KeySym key;
-      XLookupString(&ev.xkey, buf, sizeof(buf), &key, NULL);
-      handelKeypress(key);
+      if (newev->window == wm.btns.c)
+        handle_close_button();
+      if (newev->window == wm.btns.m)
+        handle_mx_button();
     }
   }
+}
 
+int main() {
+  init_wm();
+  run_wm();
+  close_window();
+  return 0;
 }
