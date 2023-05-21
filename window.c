@@ -48,6 +48,14 @@ void init_wm() {
   pp.width = 300;
 }
 
+
+
+void handle_create_window() {
+    Window newWindow = XCreateSimpleWindow(wm.dpy, wm.root, pp.px + 50, pp.py + 50, pp.width, pp.height, pp.border, BlackPixel(wm.dpy, wm.scr), WhitePixel(wm.dpy, wm.scr));
+    XMapWindow(wm.dpy, newWindow);
+    XFlush(wm.dpy);
+}
+
 void close_window() { XCloseDisplay(wm.dpy); }
 
 void handle_close_button() {
@@ -84,6 +92,13 @@ void run_wm() {
 
   XSelectInput(wm.dpy, wm.btns.m, ButtonPressMask);
   XSelectInput(wm.dpy, wm.btns.c, ButtonPressMask);
+  XSelectInput(wm.dpy, wm.child, KeyPressMask);
+
+
+  KeyCode q_keycode = XKeysymToKeycode(wm.dpy, XK_q);
+  XGrabKey(wm.dpy, q_keycode, Mod1Mask, wm.root, True, GrabModeAsync, GrabModeAsync);
+
+
   XFlush(wm.dpy);
   while (1) {
     XEvent e;
@@ -95,6 +110,18 @@ void run_wm() {
         handle_close_button();
       if (newev->window == wm.btns.m)
         handle_mx_button();
+    }
+    
+    else if (e.type == KeyPress){
+      XKeyEvent *kevent = (XKeyEvent *)&e;
+      if (kevent -> keycode == q_keycode && kevent -> state == Mod1Mask){
+        close_window();
+        exit(0);
+      }
+
+      if (kevent -> keycode == XKeysymToKeycode(wm.dpy, XK_Return)){
+        handle_create_window();
+      }
     }
   }
 }
